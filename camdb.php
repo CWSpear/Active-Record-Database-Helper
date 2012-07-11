@@ -254,8 +254,19 @@ class CamDB extends MySQLi
             {
                 if(!is_array($value))
                 {
+                    // key can supply its own operand, namely >, <, >=, <=
+                    $operand = '=';
+                    preg_match('/ ([><]=?)$/', $key, $match);
+                    if(!empty($match[1]))
+                    {
+                        // I could just make $operand be '', but someday, I may escape the field
+                        $key = preg_replace('/ ([><]=?)$/', '', $key);
+                        $operand = $match[1];
+                    }
+
                     $value = $this->real_escape_string($value);
-                    $where[] = "{$key} = '{$value}'";
+
+                    $where[] = "{$key} {$operand} '{$value}'";
                 }
                 else
                 {
