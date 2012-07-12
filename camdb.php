@@ -256,11 +256,11 @@ class CamDB extends MySQLi
                 {
                     // key can supply its own operand, namely >, <, >=, <=
                     $operand = '=';
-                    preg_match('/ ([><]=?)$/', $key, $match);
+                    preg_match('/ ([><!]=?)$/', $key, $match);
                     if(!empty($match[1]))
                     {
                         // I could just make $operand be '', but someday, I may escape the field
-                        $key = preg_replace('/ ([><]=?)$/', '', $key);
+                        $key = preg_replace('/ ([><!]=?)$/', '', $key);
                         $operand = $match[1];
                     }
 
