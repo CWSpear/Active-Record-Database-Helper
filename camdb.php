@@ -16,6 +16,22 @@ class CamDB extends MySQLi
     private $_group_by = array();
     private $_order_by = array();
     private $_limit    = '';
+
+    public $test_mode = false;
+
+    // test mode
+    public function __construct($test_mode = false)
+    {
+        // don't run MySQLi constructor if we're just testing CamDB functionality
+        if($test_mode !== true && $test_mode !== 'test')
+        {
+            parent::__construct();
+        }
+        else
+        {
+            $this->test_mode = true;
+        }
+    }
     
     public function select($select, $table = '')
     {
@@ -40,7 +56,7 @@ class CamDB extends MySQLi
         {
             $insert = explode(',', $insert);
         }
-        foreach($insert as &$i) $i = $this->real_escape_string(trim($i));
+        foreach($insert as &$i) $i = $this->_prep_value(trim($i));
 
         $this->_insert = array_merge($insert, $this->_insert);
         $this->_type = 'insert';
@@ -61,7 +77,7 @@ class CamDB extends MySQLi
         {
             $update = explode(',', $update);
         }
-        foreach($update as &$u) $u = $this->real_escape_string(trim($u));
+        foreach($update as &$u) $u = $this->_prep_value(trim($u));
         
         $this->_update = array_merge($update, $this->_update);
         $this->_type = 'update';
@@ -213,12 +229,14 @@ class CamDB extends MySQLi
             }
             return empty($set) ? '' : 'SET ' . implode(', ', $set);
         }        
-        else if($this->_type == 'insert')
+        
+        if($this->_type == 'insert')
         {
             $fields = array_keys($this->_insert);
             $values = array_values($this->_insert);
             return '(' . implode(', ', $fields) . ') VALUES (\'' . implode("', '", $values) . '\')';
         }
+        
         return '';
     }
     
@@ -264,21 +282,21 @@ class CamDB extends MySQLi
                         $operand = $match[1];
                     }
 
-                    $value = $this->real_escape_string($value);
+                    $value = $this->_prep_value($value);
 
-                    $where[] = "{$key} {$operand} '{$value}'";
+                    $where[] = "{$key} {$operand} {$value}";
                 }
                 else
                 {
                     // foreach($value as &$v)
                     // {
-                    //     $v = $this->real_escape_string($v);
+                    //     $v = $this->_prep_value($v);
                     //     $where[] = "{$key} = '{$v}'";
                     // }
 
-                    foreach($value as &$v) $v = $this->real_escape_string($v);
-                    $value = implode("', '", $value);
-                    $where[] = "{$key} IN ('{$value}')";
+                    foreach($value as &$v) $v = $this->_prep_value($v);
+                    $value = implode(", ", $value);
+                    $where[] = "{$key} IN ({$value})";
                 }
             }
         }
@@ -308,6 +326,30 @@ class CamDB extends MySQLi
         if($this->_type != 'select') return '';
         
         return empty($this->_limit) ? '' : 'LIMIT ' . $this->_limit;
+    }
+
+    private function _prep_value($value)
+    {
+        echo "$value", gettype($value);
+        switch(gettype($value))
+        {
+            case 'boolean':
+            case 'string':
+                if($this->test_mode) $return = mysql_real_escape_string($value);
+                $return = $this->real_escape_string($value);
+                return "'{$return}'";
+
+            case 'integer':
+            case 'double':
+                return $value;
+
+            case 'array':
+            case 'object':
+            case 'resource':
+            case 'NULL':
+            case 'unknown type':
+                die('Error... a value has the type "' . gettype($value) . '" which is not valid');
+        }
     }
     
     public function fetch_query($reset = true)
@@ -370,7 +412,7 @@ class CamDB extends MySQLi
         return (array) $this->row($reset);
     }
     
-    private function reset()
+    public function reset()
     {
         $this->_type     = 'select';
         $this->_result   = array();
