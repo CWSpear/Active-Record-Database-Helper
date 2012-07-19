@@ -48,28 +48,25 @@ class CamDB extends MySQLi
     }
         
     // this function triggers a query
-    public function insert($insert, $table = '')
+    public function insert($insert, $table = '', $reset = true)
     {
         if(!empty($table)) $this->table($table);
-        
-        if(!is_array($insert))
-        {
-            $insert = explode(',', $insert);
-        }
-        foreach($insert as &$i) $i = $this->_prep_value(trim($i));
 
         $this->_insert = array_merge($insert, $this->_insert);
         $this->_type = 'insert';
 
-        $query = $this->fetch_query();
-        $result = $this->query($query);
+        if(!$this->test_mode)
+        {
+            $query = $this->fetch_query($reset);
+            $result = $this->query($query);
+        }
+        else return $this;
 
-        $this->reset();
         return $result;
     }
     
     // this function triggers a query
-    public function update($update, $table = '')
+    public function update($update, $table = '', $reset = true)
     {
         if(!empty($table)) $this->table($table);
         
@@ -82,10 +79,13 @@ class CamDB extends MySQLi
         $this->_update = array_merge($update, $this->_update);
         $this->_type = 'update';
 
-        $query = $this->fetch_query();
-        $result = $this->query($query);
+        if(!$this->test_mode)
+        {
+            $query = $this->fetch_query($reset);
+            $result = $this->query($query);
+        }
+        else return $this;
 
-        $this->reset();
         return $result;
     }
     
@@ -97,8 +97,12 @@ class CamDB extends MySQLi
         
         $this->_type = 'delete';
 
-        $query = $this->fetch_query();
-        $result = $this->query($query);
+        if(!$this->test_mode)
+        {
+            $query = $this->fetch_query($reset);
+            $result = $this->query($query);
+        }
+        else return $this;
 
         $this->reset();
         return $result;
@@ -204,11 +208,14 @@ class CamDB extends MySQLi
     // private functions to build query
     private function _insert()
     {
+        // magic happens in _set
         return 'INSERT INTO ';
     }
     
     private function _select()
     {
+        foreach($this->_select as &$field) if($field !== '*') $field = $this->_prep_field($field);
+
         if(empty($this->_select)) $this->_select = array('*');
         return 'SELECT ' . implode(', ', $this->_select);
     }
@@ -223,9 +230,12 @@ class CamDB extends MySQLi
         if($this->_type == 'update')
         {
             $set = array();
-            foreach($this->_update as $key => $value)
+            foreach($this->_update as $field => $value)
             {
-                $set[] = "{$key} = '{$value}'";
+                $value = $this->_prep_value($value);
+                $field = $this->_prep_field($field);
+
+                $set[] = "{$field} = $value";
             }
             return empty($set) ? '' : 'SET ' . implode(', ', $set);
         }        
@@ -234,7 +244,11 @@ class CamDB extends MySQLi
         {
             $fields = array_keys($this->_insert);
             $values = array_values($this->_insert);
-            return '(' . implode(', ', $fields) . ') VALUES (\'' . implode("', '", $values) . '\')';
+
+            foreach($values as &$value) $value = $this->_prep_value($value);
+            foreach($fields as &$field) $field = $this->_prep_field($field);
+            
+            return '(' . implode(', ', $fields) . ') VALUES ('. implode(", ", $values) . ')';
         }
         
         return '';
@@ -248,6 +262,8 @@ class CamDB extends MySQLi
     private function _table()
     {
         $str = $this->_type != 'insert' && $this->_type != 'update' ? 'FROM ' : '';
+        foreach($this->_table as &$field) $field = $this->_prep_field($field);
+
         return  $str . implode(', ', $this->_table);
     }
 
@@ -282,6 +298,7 @@ class CamDB extends MySQLi
                         $operand = $match[1];
                     }
 
+                    $key = $this->_prep_field($key);
                     $value = $this->_prep_value($value);
 
                     $where[] = "{$key} {$operand} {$value}";
@@ -328,19 +345,29 @@ class CamDB extends MySQLi
         return empty($this->_limit) ? '' : 'LIMIT ' . $this->_limit;
     }
 
+    private function _prep_field($field)
+    {
+        $field = trim($field);
+
+        if($this->test_mode) $field = mysql_real_escape_string($field);
+        else $field = $this->real_escape_string($field);
+
+        return "`{$field}`";
+    }
+
     private function _prep_value($value)
     {
-        echo "$value", gettype($value);
         switch(gettype($value))
         {
-            case 'boolean':
             case 'string':
                 if($this->test_mode) $return = mysql_real_escape_string($value);
-                $return = $this->real_escape_string($value);
+                else $return = $this->real_escape_string($value);
                 return "'{$return}'";
 
+            case 'boolean':
             case 'integer':
             case 'double':
+            case 'float':
                 return $value;
 
             case 'array':
@@ -348,6 +375,7 @@ class CamDB extends MySQLi
             case 'resource':
             case 'NULL':
             case 'unknown type':
+            default:
                 die('Error... a value has the type "' . gettype($value) . '" which is not valid');
         }
     }
@@ -368,6 +396,8 @@ class CamDB extends MySQLi
 
     public function query($query)
     {
+        if($this->test_mode) return $this;
+
         return $this->_mysqli_result = parent::query($query);
     }
 

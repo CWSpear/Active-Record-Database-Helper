@@ -19,10 +19,10 @@
             padding:20px;
             margin-bottom:20px;
 
-            background-color:rgba(0, 0, 0, 0.1)
+            background-color:rgba(0, 0, 0, 0.2)
         }
 
-        .input, .expected, .actual, .passfail {
+        .input, .expected, .actual, .passfail, .note {
             position:relative;
             padding:6px;
             margin-bottom:10px;
@@ -40,7 +40,7 @@
             border-radius:4px;
             box-shadow:inset 0 0 5px rgba(0, 0, 0, 0.3);
             width:80px;
-            background-color:rgba(0, 0, 0, 0.1)
+            background-color:rgba(0, 0, 0, 0.2)
         }
 
         .fail .icon {
@@ -48,6 +48,14 @@
         }
 
         .pass .icon {
+            background-color:rgba(0, 128, 0, 0.5);
+        }
+
+        del {
+            background-color:rgba(128, 0, 0, 0.5);
+        }
+
+        ins {
             background-color:rgba(0, 128, 0, 0.5);
         }
     </style>
@@ -69,9 +77,15 @@
                 <div class="output"><?php echo $actual ?></div>
             </div>
             <div class="passfail <?php echo $class ?>">
-                <div class="icon"><?php echo $class ?></div>
-                <div class="output"><?php echo $class == 'fail' ? 'Failed' : 'Passed' ?></div>
+                <div class="icon"><?php echo $class == 'fail' ? 'Failed' : 'Passed' ?></div>
+                <div class="output"><?php echo $class == 'fail' ? $diff : '&nbsp;' ?></div>
             </div>
+            <?php if(!empty($note)): ?>
+            <div class="note">
+                <div class="label">Note</div>
+                <div class="output"><?php echo $note ?></div>
+            </div>
+            <?php endif ?>
         </div>
     <?php endforeach ?>
     </div>
