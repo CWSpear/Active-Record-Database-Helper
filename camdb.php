@@ -12,6 +12,7 @@ class CamDB extends MySQLi
     private $_table    = array();
     private $_join     = array();
     private $_where    = array();
+    private $_like     = array();
     private $_or_where = array();
     private $_group_by = array();
     private $_order_by = array();
@@ -19,19 +20,22 @@ class CamDB extends MySQLi
 
     public $test_mode = false;
 
+    // this outputs queries and stuff, so it should be false for production
+    public $debug = true;
+
     // test mode
-    public function __construct($test_mode = false)
-    {
-        // don't run MySQLi constructor if we're just testing CamDB functionality
-        if($test_mode !== true && $test_mode !== 'test')
-        {
-            parent::__construct();
-        }
-        else
-        {
-            $this->test_mode = true;
-        }
-    }
+    // public function __construct($test_mode = false)
+    // {
+    //     // don't run MySQLi constructor if we're just testing CamDB functionality
+    //     if($test_mode !== true && $test_mode !== 'test')
+    //     {
+    //         parent::__construct();
+    //     }
+    //     else
+    //     {
+    //         $this->test_mode = true;
+    //     }
+    // }
     
     public function select($select, $table = '')
     {
@@ -72,9 +76,9 @@ class CamDB extends MySQLi
         
         if(!is_array($update))
         {
+            // TODO: this isn't expected syntax
             $update = explode(',', $update);
         }
-        foreach($update as &$u) $u = $this->_prep_value(trim($u));
         
         $this->_update = array_merge($update, $this->_update);
         $this->_type = 'update';
@@ -122,8 +126,7 @@ class CamDB extends MySQLi
     // alias for table
     public function from($table)
     {
-        $this->table($table);
-        return $this;
+        return $this->table($table);
     }
     
     public function where($key, $value = '')
@@ -162,6 +165,18 @@ class CamDB extends MySQLi
     public function in($key, $values)
     {
         $this->_where[$key] = $values;
+        return $this; // for chaining
+    }
+
+    public function like($key, $value ='')
+    {
+        if(!is_array($key)) $key = array($key => $value);
+        
+        foreach($key as $k => $v)
+        {
+            $this->_like[$k] = $v;
+        }
+
         return $this; // for chaining
     }
     
@@ -293,7 +308,6 @@ class CamDB extends MySQLi
                     preg_match('/ ([><!]=?)$/', $key, $match);
                     if(!empty($match[1]))
                     {
-                        // I could just make $operand be '', but someday, I may escape the field
                         $key = preg_replace('/ ([><!]=?)$/', '', $key);
                         $operand = $match[1];
                     }
@@ -317,6 +331,17 @@ class CamDB extends MySQLi
                 }
             }
         }
+
+        foreach($this->_like as $key => $value) 
+        {
+            $operand = 'LIKE';
+
+            $key = $this->_prep_field($key);
+            $value = $this->_prep_value($value);
+
+            $where[] = "{$key} {$operand} {$value}";
+        }
+
         return empty($where) ? '' : 'WHERE ' . implode(' AND ', $where);
     }
     
@@ -360,20 +385,25 @@ class CamDB extends MySQLi
         switch(gettype($value))
         {
             case 'string':
+                $value = trim($value);
                 if($this->test_mode) $return = mysql_real_escape_string($value);
                 else $return = $this->real_escape_string($value);
                 return "'{$return}'";
 
-            case 'boolean':
             case 'integer':
             case 'double':
             case 'float':
                 return $value;
 
+            case 'boolean':
+                return $value ? 1 : 0;
+
+            case 'NULL':
+                return 'NULL';
+
             case 'array':
             case 'object':
             case 'resource':
-            case 'NULL':
             case 'unknown type':
             default:
                 die('Error... a value has the type "' . gettype($value) . '" which is not valid');
@@ -390,6 +420,8 @@ class CamDB extends MySQLi
         $query[] = $this->_group_by();
         $query[] = $this->_order_by();
         $query[] = $this->_limit();
+
+        if($reset) $this->reset();
                 
         return implode(' ', $query);
     }
@@ -398,7 +430,15 @@ class CamDB extends MySQLi
     {
         if($this->test_mode) return $this;
 
-        return $this->_mysqli_result = parent::query($query);
+        $this->_mysqli_result = parent::query($query);
+
+        if(!$this->_mysqli_result && $this->debug)
+        {
+            echo $this->error;
+            die('<br>' . $query);
+        }
+
+        return $this->_mysqli_result;
     }
 
     public function result($reset = true)
@@ -454,6 +494,7 @@ class CamDB extends MySQLi
         $this->_join     = array();
         $this->_where    = array();
         $this->_or_where = array();
+        $this->_like     = array();
         $this->_group_by = array();
         $this->_order_by = array();
         $this->_limit    = '';
